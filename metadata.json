@@ -1,0 +1,5 @@
+{
+  "name": "Analog Clock Time Guesser",
+  "description": "A fun and interactive game for children to learn how to read an analog clock. Guess the time shown on the clock to score points!",
+  "requestFramePermissions": []
+}
