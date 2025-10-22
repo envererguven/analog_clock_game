@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import AnalogClock from './components/AnalogClock';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
@@ -10,13 +10,15 @@ function App() {
   const [guessMinute, setGuessMinute] = useState('');
   const [guessSecond, setGuessSecond] = useState('');
   const [score, setScore] = useState(0);
-  const [feedback, setFeedback] = useState<{ message: string; type: 'correct' | 'incorrect' | 'info' }>({ message: 'Guess the time shown on the clock!', type: 'info' });
+  const [feedback, setFeedback] = useState<{ message: string; type: 'correct' | 'incorrect' | 'info' }>({ message: 'Guess the current time to start!', type: 'info' });
   const [isRoundOver, setIsRoundOver] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [numeralType, setNumeralType] = useState<NumeralType>('roman');
+  const [showAmPm, setShowAmPm] = useState(true);
 
   const generateRandomTime = useCallback(() => {
-    const randomHour = Math.floor(Math.random() * 24);
+    // If AM/PM is hidden, default to AM hours (0-11)
+    const randomHour = showAmPm ? Math.floor(Math.random() * 24) : Math.floor(Math.random() * 12);
     let randomMinute = 0;
     let randomSecond = 0;
 
@@ -24,13 +26,15 @@ function App() {
       case 'easy':
         randomMinute = [0, 15, 30, 45][Math.floor(Math.random() * 4)];
         break;
+      case 'medium':
+        randomMinute = Math.floor(Math.random() * 12) * 5;
+        break;
       case 'hard':
         randomMinute = Math.floor(Math.random() * 60);
         randomSecond = Math.floor(Math.random() * 60);
         break;
-      case 'medium':
       default:
-        randomMinute = Math.floor(Math.random() * 60);
+         randomMinute = Math.floor(Math.random() * 60);
         break;
     }
 
@@ -42,11 +46,28 @@ function App() {
     setGuessSecond('');
     setFeedback({ message: 'A new challenge! Guess the time.', type: 'info' });
     setIsRoundOver(false);
-  }, [difficulty]);
+  }, [difficulty, showAmPm]);
+
+  const isInitialMount = useRef(true);
 
   useEffect(() => {
-    generateRandomTime();
-  }, [generateRandomTime]);
+    // This effect generates a new time when difficulty changes, but skips the initial render.
+    if (isInitialMount.current) {
+        isInitialMount.current = false;
+    } else {
+        generateRandomTime();
+    }
+  }, [difficulty, generateRandomTime]);
+
+  useEffect(() => {
+    // Set default AM/PM visibility based on difficulty
+    if (difficulty === 'easy') {
+      setShowAmPm(false);
+    } else {
+      setShowAmPm(true);
+    }
+  }, [difficulty]);
+
 
   const handleDifficultyChange = (newDifficulty: Difficulty) => {
     setDifficulty(newDifficulty);
@@ -72,10 +93,16 @@ function App() {
     const guessMinuteNum = parseInt(guessMinute, 10);
     const guessSecondNum = difficulty === 'hard' ? parseInt(guessSecond, 10) : 0;
 
-    if (isNaN(guessHourNum) || isNaN(guessMinuteNum) || guessHourNum < 1 || guessHourNum > 12 || guessMinuteNum < 0 || guessMinuteNum > 59) {
-      setFeedback({ message: 'Please enter a valid time (hour 1-12, minute 0-59).', type: 'incorrect' });
+    const maxHour = showAmPm ? 23 : 12;
+    const validationMessage = showAmPm
+      ? `Please enter a valid time (hour 1-23, minute 0-59).`
+      : `Please enter a valid time (hour 1-12, minute 0-59).`;
+    
+    if (isNaN(guessHourNum) || isNaN(guessMinuteNum) || guessHourNum < 1 || guessHourNum > maxHour || guessMinuteNum < 0 || guessMinuteNum > 59) {
+      setFeedback({ message: validationMessage, type: 'incorrect' });
       return;
     }
+
      if (difficulty === 'hard' && (isNaN(guessSecondNum) || guessSecondNum < 0 || guessSecondNum > 59)) {
       setFeedback({ message: 'Please enter valid seconds (0-59).', type: 'incorrect' });
       return;
@@ -90,7 +117,17 @@ function App() {
       targetHour12h = 12;
     }
 
-    let isCorrect = guessHourNum === targetHour12h && guessMinuteNum === targetMinute;
+    let isHourCorrect = false;
+    // When AM/PM is shown, users might use 24h format for PM times.
+    if (showAmPm && targetHour >= 12) { 
+        // PM time. Accept 12h or 24h format.
+        isHourCorrect = (guessHourNum === targetHour12h || guessHourNum === targetHour);
+    } else {
+        // AM time or AM/PM is hidden (defaults to AM). Only accept 12h format.
+        isHourCorrect = (guessHourNum === targetHour12h);
+    }
+    
+    let isCorrect = isHourCorrect && guessMinuteNum === targetMinute;
     if (difficulty === 'hard') {
         isCorrect = isCorrect && guessSecondNum === targetSecond;
     }
@@ -121,10 +158,10 @@ function App() {
     info: 'text-blue-700 bg-blue-100 border-blue-400',
   };
   
-  const difficultyConfig: Record<Difficulty, {label: string, description: string, color: string }> = {
-    easy: { label: 'Easy', description: 'Ages < 6', color: 'bg-green-500 hover:bg-green-600' },
-    medium: { label: 'Medium', description: 'Ages 6-8', color: 'bg-sky-500 hover:bg-sky-600' },
-    hard: { label: 'Hard', description: 'Ages > 8', color: 'bg-red-500 hover:bg-red-600' },
+  const difficultyConfig: Record<Difficulty, {label: string, color: string }> = {
+    easy: { label: 'Easy', color: 'bg-green-500 hover:bg-green-600' },
+    medium: { label: 'Medium', color: 'bg-sky-500 hover:bg-sky-600' },
+    hard: { label: 'Hard', color: 'bg-red-500 hover:bg-red-600' },
   }
 
   const ampm = targetTime.getHours() >= 12 ? 'PM' : 'AM';
@@ -142,27 +179,35 @@ function App() {
                 <button 
                     key={level}
                     onClick={() => handleDifficultyChange(level)}
-                    className={`px-2 py-2 text-white font-bold rounded-lg shadow-md transition-all duration-200 ${difficultyConfig[level].color} ${difficulty === level ? 'ring-4 ring-offset-2 ring-yellow-400' : 'opacity-70 hover:opacity-100'}`}
+                    className={`px-2 py-3 text-white font-bold rounded-lg shadow-md transition-all duration-200 ${difficultyConfig[level].color} ${difficulty === level ? 'ring-4 ring-offset-2 ring-yellow-400' : 'opacity-70 hover:opacity-100'}`}
                 >
                     {difficultyConfig[level].label}
-                    <span className="block text-xs font-normal">{difficultyConfig[level].description}</span>
                 </button>
             ))}
         </div>
 
         <main className="flex flex-col items-center">
+          <div className="flex justify-center items-center gap-4 mb-4">
+              <button
+                onClick={toggleNumeralType}
+                className="px-4 py-2 bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
+              >
+                {numeralType === 'roman' ? 'Decimal' : 'Roman'}
+              </button>
+              <button
+                onClick={() => setShowAmPm(prev => !prev)}
+                className="px-4 py-2 bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
+              >
+                {showAmPm ? 'Hide' : 'Show'} AM/PM
+              </button>
+          </div>
+        
           <AnalogClock 
             time={targetTime} 
             numeralType={numeralType} 
             showSeconds={difficulty === 'hard'} 
-            ampm={difficulty !== 'easy' ? ampm : undefined}
+            ampm={showAmPm ? ampm : undefined}
           />
-           <button
-              onClick={toggleNumeralType}
-              className="mb-4 px-4 py-2 bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
-            >
-              Switch to {numeralType === 'roman' ? 'Decimal' : 'Roman'} Numerals
-            </button>
           
           <div className="w-full">
             <div className={`p-3 mb-4 rounded-lg border ${feedbackColors[feedback.type]} transition-all duration-300`}>
